@@ -41,27 +41,7 @@ reg_ghog <- lm(Temp_Mar ~ Shadow, data = groundhog)
 summary(reg_ghog)
 
 
-## [2] Demand for Corn
-## -------------------
-load(url("https://github.com/cmann3/bbr/raw/main/Corn.rda"))
-summary(Corn)
-
-## Plot Quantity vs. Price
-ggplot(Corn, aes(Q, P)) +
-  geom_point() +
-  geom_smooth(method="lm")
-
-## Linear Regression
-reg_corn  <- lm(Q ~ P, data = Corn)
-summary(reg_corn)
-
-reg_corn2 <- lm(Q ~ P + Income, data = Corn)
-summary(reg_corn2)
-
-
-
-
-## [3] Horror Films - Box Office
+## [2] Horror Films - Box Office
 ## -----------------------------
 load(url("https://github.com/cmann3/bbr/raw/main/horror.rda"))
 summary(horror)
@@ -83,6 +63,26 @@ horror %>%
   reg_horr3
 summary(reg_horr3)
 
+
+## [3] Demand for Corn
+## -------------------
+load(url("https://github.com/cmann3/bbr/raw/main/Corn.rda"))
+summary(Corn)
+
+## Plot Quantity vs. Price
+ggplot(Corn, aes(Q, P)) +
+  geom_point() +
+  geom_smooth(method="lm")
+
+## Linear Regression
+reg_corn  <- lm(Q ~ P, data = Corn)
+summary(reg_corn)
+
+reg_corn2 <- lm(Q ~ P + Income, data = Corn)
+summary(reg_corn2)
+
+
+
 ## [4] Diagnostics
 ## ---------------
 source(url("https://github.com/cmann3/bbr/raw/main/diagnose.R"))
@@ -93,6 +93,23 @@ source(url("https://github.com/cmann3/bbr/raw/main/diagnose.R"))
 # 3) Observations of the error are uncorrelated with each other
 # 4) Error has constant variance (homoskedasticity)
 # 5) Error term is normally distributed
+
+
+# Revisiting HORROR
+diagnose(reg_horr2)
+diagnose(reg_horr2, rm.outliers = TRUE) # remove outliers
+
+reg_horr4 <- lm(log(revenue) ~ log(budget) + vote_average + runtime, data = horror)
+diagnose(reg_horr4)
+
+diagnose(reg_horr3)
+horror %>%
+  select(-id, -title, -release_date, -collection) %>%
+  mutate(revenue = log(revenue), budget = log(budget)) %>%
+  lm(revenue ~ ., data = .) ->
+  reg_horr5
+diagnose(reg_horr5)
+
 
 # Revisiting CORN
 diagnose(reg_corn2)
@@ -109,17 +126,26 @@ diagnose(reg_corn4, se="robust")
 coeftest(reg_corn4, vcov=vcovHC(reg_corn4, type="HC0"))
 
 
-# Revisiting HORROR
-diagnose(reg_horr2)
+## [5] Simultaneity
+## ----------------
+## Simultaneity occurs when two variables are jointly determined such as P & Q
+## (price & quantity, supply and demand)
+## Use a two-stage method to estimate.
 
-reg_horr4 <- lm(log(revenue) ~ log(budget) + vote_average + runtime, data = horror)
-diagnose(reg_horr4)
+## In stage 1, let y be the endogenous variable, include all exogenous
+## and instrument variables.
+stg1_supply <- lm(log(P) ~ log(Income) + log(Prod), data = Corn)
+summary(stg1_supply)
 
-diagnose(reg_horr3)
+## Obtain fitted values (log(Price)) after controlling for other effects.
+Corn$Phat <- stg1_supply$fitted.values
 
-horror %>%
-  select(-id, -title, -release_date, -collection) %>%
-  mutate(revenue = log(revenue), budget = log(budget)) %>%
-  lm(revenue ~ ., data = .) ->
-  reg_horr5
-diagnose(reg_horr5)
+## Use the fitted price in the 2nd stage.
+reg_demand <- lm(log(Q) ~ log(Income) + Phat, data = Corn)
+summary(reg_demand)
+
+
+## Estimate supply by switching the control variables.
+reg_supply <- lm(log(Q) ~ log(Prod) + Phat, data = Corn)
+summary(reg_supply)
+

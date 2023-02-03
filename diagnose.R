@@ -6,7 +6,9 @@ for (i in packages){
 
 
 diagnose <- function(x, ...) UseMethod("diagnose")
-diagnose.lm <- function(model, thresh.outlier=3, digits=3, se = NULL, ...){
+diagnose.lm <- function(model, thresh.outlier=3, digits=3,
+                        rm.outliers=FALSE, rm.leverage=FALSE,
+                        se = NULL, ...){
   p <- model$rank
   n <- model$df.residual + p
 
@@ -88,6 +90,18 @@ diagnose.lm <- function(model, thresh.outlier=3, digits=3, se = NULL, ...){
   outliers      <- which(abs(.data$.resids) >= thresh.outlier)
   influential   <- which(.data$.cooks >= thresh.influent)
 
+  if (rm.outliers | rm.leverage){
+    rows <- numeric(0)
+    if (rm.outliers) rows <- union(rows, outliers)
+    if (rm.leverage) rows <- union(rows, high.leverage)
+    .data = .data[-rows,]
+    ncall <- which(names(model$call) == "data")
+    if (length(ncall) == 0){ ncall <- 3 }
+    model$call[[ncall]] <- .data
+    new_model <- eval(model$call)
+    return(diagnose(new_model))
+  }
+
   ## OTHER STATS
   ## -----------
   LL   <- sum(log(exp(-.data$.resids/(2*.summary$sigma^2))/(.summary$sigma*sqrt(2*pi))))
@@ -102,6 +116,7 @@ diagnose.lm <- function(model, thresh.outlier=3, digits=3, se = NULL, ...){
   structure(
     list(
       method          = "lm",
+      call            = model$call,
       data            = .data,
       coefficients    = .coeffs,
       r.squared       = signif(.summary$r.squared, digits),
